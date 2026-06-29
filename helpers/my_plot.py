@@ -351,7 +351,7 @@ def heatmap(data=None, annot=True, fmt="0.2f", linewidth=0.5,
         show(save_path=save_path)
 
 #----------------------------------------------------------
-def barplot(data=None, x=None, y=None, hue=None, estimator=np.mean, 
+def barplot(data=None, x=None, y=None, hue=None, estimator=np.mean, order=None,
             palette=None, title=None, xlabel=None, ylabel=None,
             width=1280, height=640, save_path=None, ax=None):
     """
@@ -377,7 +377,7 @@ def barplot(data=None, x=None, y=None, hue=None, estimator=np.mean,
         fig, ax=init(width=width, height=height, title=title, xlabel=xlabel, ylabel=ylabel)
 
     # 히스토그램 그리기
-    sb.barplot(data=data, x=x, y=y, hue=hue, estimator=estimator, palette=palette, ax=ax)
+    sb.barplot(data=data, x=x, y=y, hue=hue, order=order, estimator=estimator, palette=palette, ax=ax)
     
     # 그래프 표시
     if fig is not None:
