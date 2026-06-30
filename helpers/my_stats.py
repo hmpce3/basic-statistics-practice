@@ -2,11 +2,13 @@ import numpy as np
 from math import sqrt
 from itertools import combinations
 from IPython.display import display
-from pandas import DataFrame, melt, concat, Series
+from pandas import DataFrame, melt, concat, Series, crosstab
 from scipy.stats import t
 from scipy.stats import normaltest, bartlett, levene
 from scipy.stats import ttest_1samp, wilcoxon, ttest_rel, ttest_ind, mannwhitneyu
 from scipy.stats import pearsonr, spearmanr
+from scipy.stats import chisquare, chi2_contingency, fisher_exact
+
 # VIF 계산을 위한 statsmodels 패키지
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.tools import add_constant
@@ -887,3 +889,217 @@ def compute_vif(df, columns=None):
  
     # 상수항(const)은 분석 대상이 아니므로 제외하고 VIF 기준 내림차순 정렬해서 반환
     return vif.drop('const').sort_values(by='VIF', ascending=False)
+
+#==================================
+# 적합도 검정 함수 정의
+#==================================
+def chi2_goodness_of_fit(data, column, expected=None, order=None, alpha=0.05, plot=True, palette=None, title=None, 
+                         xlabel=None, ylabel=None, width=1280, height=640, save_path=None):
+    """
+    적합도 검정을 가정확인부터 강도까지 일괄 수행하는 함수
+    
+    Args:
+        data (DataFrame): 원본 데이터 프레임
+        column (str): 검정 대상 범주형 변수명
+        expected (list | None): 각 범주의 기대빈도 또는 기대비율. None이면 균등분포 (기본값:None)
+        order : 명목형 범주의 표시, 계산순서를 지정하는 리스트 (기본값: None)
+        alpha (float): 유의수준 (기본값: 0.05)
+        plot (bool) : 결과를 시각화할지 여부 (기본값: True)
+        palette (str or list): 색상 팔레트 (기본값: None)
+        title (str): 그래프 제목 (기본값: None)
+        xlabel (str) : x축 라벨 (기본값: None -> 변수명)
+        ylabel (str) : y축 라벨 (기본값: None -> '빈도')
+        width (int): 그래프 너비 (기본값: 1280)
+        height (int): 그래프 높이 (기본값: 1024)
+        save_path (str): 그래프 저장 경로 (기본값: None)
+
+    Returns:
+        DataFrame : 단일 행 결과표
+    """
+    # --- 1) 관측 빈도 집계 ---
+    # 범주별 관측빈도 집계 (order가 있으면 그 순서로, 없으면 라벨 순으로 정렬)
+    if order is not None:
+        observed = data[column].value_counts().reindex(order)
+    else:
+        observed = data[column].value_counts().sort_index()
+    n = int(observed.sum())
+    k = len(observed)
+
+    # --- 2) 기대 빈도 결정 ---
+    # None이면 균등분포, 합이 1이하인 비율이면 빈도로 환산, 그 외는 빈도로 사용
+    if expected is None:
+        exp = np.full(k,n/k)
+    elif np.sum(expected) <= 1.0001:
+        exp = np.array(expected, dtype=float) * n
+    else:
+        exp = np.array(expected, dtype=float)
+    
+    # --- 3) 가정 확인 ---
+    # 기대빈도 점검(5이상 셀이 80% 이상 + 1미만 셀 없음)
+    pct_ok = float((exp >= 5).mean())
+    min_exp = float(exp.min())
+    assumption = bool(pct_ok >= 0.8 and min_exp >= 1)
+    recommend = "Chi-square goodness-of-fit" if assumption else 'category merge'
+    
+    # --- 4) 적합도 검정 수행 ---
+    # 카이제곱 적합도 검정 (관측빈도 vs 기대빈도)
+    chi2, p = chisquare(f_obs=observed.values, f_exp=exp)
+
+    # --- 5) 강도 확인 ---
+    # 효과크기 : Cohen's w = sqrt(chi2 / n)
+    w = float(np.sqrt(chi2 / n))
+
+    # 효과크기 강도 라벨
+    # --> (Cohen 관례 : 0.1 아래 미미, 0.3 약함, 0.5 보통, 그 이상 강함)
+    if w < 0.1:
+        strength = 'Negligible'
+    elif w < 0.3:
+        strength = 'Weak'
+    elif w < 0.5:
+        strength = 'Moderate'
+    else:
+        strength = 'Strong'
+
+    # --- 6) 결과표 생성 ---
+    result_df = DataFrame([{
+        'chi2' : round(float(chi2), 4),
+        'dof': k-1,
+        'p-value' : round(float(p), 6),
+        'significant' : bool(p<alpha),
+        'effect(w)' :round(w,4),
+        'strength' : strength,
+        'min_expected' : round(min_exp,2),
+        'assumption':assumption
+    }], index=['Chi-square goodness-of-fit'])
+    
+    # --- 7) 결과 시각화 ---
+    # 관측빈도 vs 기대빈도 막대그래프(long 형식으로 변환해 hue로 비교)
+    if plot:
+        cats = list(observed.index)
+        plot_df = DataFrame({
+            column : cats * 2,
+            "구분": ["관측"]*len(cats) + ["기대"]*len(cats),
+            "빈도": list(observed.values) + list(exp),
+
+        })
+        my_plot.barplot(data=plot_df, x=column, y='빈도', hue='구분', order=cats, palette=palette, title=title, 
+                        xlabel=xlabel if xlabel is not None else column,
+                        ylabel=ylabel if ylabel is not None else '빈도',
+                        width=width, height=height, save_path=save_path)
+        
+        return result_df
+
+#==================================
+# 독립성/동질성 일괄처리 함수 정의
+#==================================
+def _chi2_crosstab(data, row, col, kind, alpha=0.05, plot=True, palette=None, orient='v', title=None, 
+                         xlabel=None, ylabel=None, width=1280, height=640, save_path=None):
+    """
+    독립성 검정의 공통 처리부(가정 확인 → 카이제곱/피셔 분기 → 크라메르 V)
+    
+    Args:
+        data (DataFrame): 원본 데이터 프레임 (개별 관측치)
+        row (str): 행 범주형 변수명
+        col (str): 열 범주형 변수명
+        kind (str): 검정 종류 (독립성 검정 : 'independence' / 동질성 검정: 'homogeneity')
+        alpha (float): 유의수준 (기본값: 0.05)
+        plot (bool) : 결과를 시각화할지 여부 (기본값: True)
+        palette (str or list): 색상 팔레트 (기본값: None)
+        title (str): 그래프 제목 (기본값: None)
+        xlabel (str) : x축 라벨 (기본값: None -> 변수명)
+        ylabel (str) : y축 라벨 (기본값: None -> '빈도')
+        width (int): 그래프 너비 (기본값: 1280)
+        height (int): 그래프 높이 (기본값: 1024)
+        save_path (str): 그래프 저장 경로 (기본값: None)
+
+    Returns:
+        DataFrame : (row, col)를 인덱스로 하는 단일 행 결과표
+    """
+    # --- 1) 대상 데이터 전처리 ---
+    # 두 범주형 변수로 교차표(관측빈도) 생성
+    ct = crosstab(data[row], data[col])
+
+    # --- 2) 가정 확인 ---
+    # 카이제곱으로 기대빈도 확보(2x2는 예이츠 보정 기본 적용) 후 가정 점검
+    chi2, p_chi, dof, excepted = chi2_contingency(ct)
+    pct_ok = float((excepted >=5).mean())
+    min_exp = float(excepted.min())
+    assumption = bool(pct_ok >= 0.8 and min_exp >=1)
+
+    # --- 3) 검정 수행(가정에 따른 분기) ---
+    # 가정 위한 + 2x2 이면 피셔의 정확검정으로, 그 외는 카이제곱으로 분기
+    if (not assumption) and tuple(ct.shape) == (2,2):
+        test_name = "Fisher's exact test"
+        _,p = fisher_exact(ct)
+        chi2_out, dof_out = np.nan, np.nan
+    else:
+        test_name = "Chi-square test of %s" % kind
+        p, chi2_out, dof_out = p_chi, chi2, dof
+
+    # --- 4) 강도 확인 ---
+    # 효과크기 : 크라메르V(피셔로 분기해도 chi2 기반 참고치를 함께 제공)
+    n = int(ct.values.sum())
+    min_dim = min(ct.shape) - 1
+    cramers_v = float(np.sqrt(chi2 / (n * min_dim))) if min_dim > 0 else np.nan
+
+    # 효과크기 강도 라벨(Cohen 관례 : 0.1 아래 미미, 0.3 약함, 0.5 보통, 그 이상 강함)
+    if cramers_v < 0.1:
+        strength = 'Negligible'
+    elif cramers_v < 0.3:
+        strength = 'Weak'
+    elif cramers_v < 0.5:
+        strength = 'Moderate'
+    else:
+        strength = 'Strong'
+    
+    # --- 5) 결과표 생성 ---
+    result_df = DataFrame([{
+        'row' : row,
+        'col' : col,
+        'test' : test_name,
+        'chi2' : np.nan if np.isnan(chi2_out) else round(float(chi2_out), 4),
+        'dof': dof_out,
+        'p-value' : round(float(p), 6),
+        'significant' : bool(p < alpha),
+        'effect(v)' :round(cramers_v,4),
+        'strength' : strength,
+        'min_expected' : round(min_exp,2),
+        'assumption':assumption
+    }]).set_index(['row','col'])
+    
+    # --- 6) 결과 시각화 ---
+    # 행 범주별 열 범주 구성비를 100% 누적 막대 그래프로 표시
+    if plot:
+        tmp = data[[row, col]].copy()
+        tmp['_n'] = 1 # 빈도 집계용 보조 컬럼
+        my_plot.stackplot(data=tmp, x=row, y='_n', hue=col, orient=orient, aggfunc='sum', ratio=True, palette=palette,
+                          title=title, xlabel=xlabel if xlabel is not None else row,
+                          ylabel=ylabel if xlabel is not None else '비율(%)', width=width, height=height, save_path=save_path)
+    
+    return result_df
+
+#====================
+# 독립성 검정 함수
+#====================
+def chi2_independence(data, x, y, alpha=0.05, plot=True, palette=None, orient='v', title=None, 
+                         xlabel=None, ylabel=None, width=1280, height=640, save_path=None):
+    """
+    독립성 검정을 가정확인부터 강도까지 일괄 수행하는 함수
+    _chi2_crosstab()를 호출하여, 두 범주형 변수의 독립성 검정을 수행한다.
+    """
+
+    return _chi2_crosstab(data, x, y, "independence", alpha, plot=plot, palette=palette, orient=orient,
+                          title=title, xlabel=xlabel, width=width, save_path=save_path)
+
+#====================
+# 동질성 검정 함수
+#====================
+def chi2_homogeneity(data, group, category, alpha=0.05, plot=True, palette=None, orient='v', title=None, 
+                         xlabel=None, ylabel=None, width=1280, height=640, save_path=None):
+    """
+    동질성 검정을 가정확인부터 강도까지 일괄 수행하는 함수
+    _chi2_crosstab()를 호출하여, 두 범주형 변수의 동질성 검정을 수행한다.
+    """
+
+    return _chi2_crosstab(data, group, category, "homogeneity", alpha, plot=plot, palette=palette, orient=orient,
+                          title=title, xlabel=xlabel, width=width, save_path=save_path)
