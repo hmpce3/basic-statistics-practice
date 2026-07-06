@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="420">
+<rect width="100%" height="100%" fill="white"/>
+<text x="20" y="28" font-size="22" font-weight="700">Q-Q Plot (정규성 만족)</text>
+<line x1="70" y1="360" x2="450" y2="360" stroke="black"/>
+<line x1="70" y1="40" x2="70" y2="360" stroke="black"/>
+<line x1="70.0" y1="360.0" x2="450.0" y2="40.0" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6 4"/>
+<circle cx="82.7" cy="346.7" r="3.8" fill="#2563eb"/>
+<circle cx="101.7" cy="336.0" r="3.8" fill="#2563eb"/>
+<circle cx="120.7" cy="320.0" r="3.8" fill="#2563eb"/>
+<circle cx="133.3" cy="304.0" r="3.8" fill="#2563eb"/>
+<circle cx="152.3" cy="293.3" r="3.8" fill="#2563eb"/>
+<circle cx="165.0" cy="282.7" r="3.8" fill="#2563eb"/>
+<circle cx="184.0" cy="261.3" r="3.8" fill="#2563eb"/>
+<circle cx="196.7" cy="250.7" r="3.8" fill="#2563eb"/>
+<circle cx="209.3" cy="240.0" r="3.8" fill="#2563eb"/>
+<circle cx="228.3" cy="229.3" r="3.8" fill="#2563eb"/>
+<circle cx="247.3" cy="208.0" r="3.8" fill="#2563eb"/>
+<circle cx="260.0" cy="197.3" r="3.8" fill="#2563eb"/>
+<circle cx="272.7" cy="186.7" r="3.8" fill="#2563eb"/>
+<circle cx="291.7" cy="176.0" r="3.8" fill="#2563eb"/>
+<circle cx="310.7" cy="154.7" r="3.8" fill="#2563eb"/>
+<circle cx="323.3" cy="144.0" r="3.8" fill="#2563eb"/>
+<circle cx="336.0" cy="133.3" r="3.8" fill="#2563eb"/>
+<circle cx="355.0" cy="122.7" r="3.8" fill="#2563eb"/>
+<circle cx="374.0" cy="101.3" r="3.8" fill="#2563eb"/>
+<circle cx="386.7" cy="90.7" r="3.8" fill="#2563eb"/>
+<circle cx="405.7" cy="80.0" r="3.8" fill="#2563eb"/>
+<circle cx="424.7" cy="58.7" r="3.8" fill="#2563eb"/>
+<circle cx="437.3" cy="48.0" r="3.8" fill="#2563eb"/>
+<text x="180" y="400" font-size="16">점들이 45° 기준선을 따라 배열 → 정규성 만족</text>
+</svg>

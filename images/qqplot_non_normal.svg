@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="420">
+<rect width="100%" height="100%" fill="white"/>
+<text x="20" y="28" font-size="22" font-weight="700">Q-Q Plot (정규성 위반)</text>
+<line x1="70" y1="360" x2="450" y2="360" stroke="black"/>
+<line x1="70" y1="40" x2="70" y2="360" stroke="black"/>
+<line x1="70.0" y1="360.0" x2="450.0" y2="40.0" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6 4"/>
+<circle cx="82.7" cy="402.0" r="3.8" fill="#2563eb"/>
+<circle cx="101.7" cy="370.8" r="3.8" fill="#2563eb"/>
+<circle cx="120.7" cy="342.9" r="3.8" fill="#2563eb"/>
+<circle cx="133.3" cy="325.9" r="3.8" fill="#2563eb"/>
+<circle cx="152.3" cy="302.5" r="3.8" fill="#2563eb"/>
+<circle cx="165.0" cy="288.1" r="3.8" fill="#2563eb"/>
+<circle cx="184.0" cy="268.1" r="3.8" fill="#2563eb"/>
+<circle cx="196.7" cy="255.7" r="3.8" fill="#2563eb"/>
+<circle cx="209.3" cy="243.9" r="3.8" fill="#2563eb"/>
+<circle cx="228.3" cy="227.0" r="3.8" fill="#2563eb"/>
+<circle cx="247.3" cy="210.7" r="3.8" fill="#2563eb"/>
+<circle cx="260.0" cy="200.0" r="3.8" fill="#2563eb"/>
+<circle cx="272.7" cy="189.3" r="3.8" fill="#2563eb"/>
+<circle cx="291.7" cy="173.0" r="3.8" fill="#2563eb"/>
+<circle cx="310.7" cy="156.1" r="3.8" fill="#2563eb"/>
+<circle cx="323.3" cy="144.3" r="3.8" fill="#2563eb"/>
+<circle cx="336.0" cy="131.9" r="3.8" fill="#2563eb"/>
+<circle cx="355.0" cy="111.9" r="3.8" fill="#2563eb"/>
+<circle cx="374.0" cy="90.0" r="3.8" fill="#2563eb"/>
+<circle cx="386.7" cy="74.1" r="3.8" fill="#2563eb"/>
+<circle cx="405.7" cy="48.1" r="3.8" fill="#2563eb"/>
+<circle cx="424.7" cy="19.2" r="3.8" fill="#2563eb"/>
+<circle cx="437.3" cy="-2.0" r="3.8" fill="#2563eb"/>
+<text x="180" y="400" font-size="16">S자 형태 및 꼬리 이탈 → 정규성 위반</text>
+</svg>
