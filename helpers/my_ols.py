@@ -1,6 +1,6 @@
 import numpy as np
 import seaborn as sb
-from IPython.display import display
+from IPython.display import display, Markdown
 from pandas import DataFrame
 from statsmodels.api import add_constant, OLS
 from statsmodels.stats.diagnostic import linear_reset
@@ -441,7 +441,7 @@ def report_fitness(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=None):
 #====================================
 # 독립변수 보고 표 생성 - 함수 정의
 #====================================
-def report_variables(fit, data):
+def report_variables(fit, data, hc3=False):
     """
     적합된 회귀모델의 독립변수별 회귀계수 보고표를 데이터프레임으로 생성해 반환한다.
 
@@ -457,41 +457,90 @@ def report_variables(fit, data):
     """
     # --- 1) 대상 변수 확인 및 VIF 계산 ---
     yname = fit.model.endog_names    # 종속변수 이름
-    # 상수항(const)을 제외한 독립변수 이름 (위치가 아니라 이름으로 걸러낸다)
-    xnames = []
-    for name in fit.model.exog_names:
-        if name != 'const':
-            xnames.append(name)
+    # 상수항(const)을 포함한 전체 변수 이름 순서(위치 인덱스 계산에 사용)
+    exog_names = list(fit.model.exog_names)
+    # 상수항(const)을 제외한 독립변수 이름
+    xnames = [name for name in exog_names if name != 'const']
 
     # 독립변수 전체를 대상으로 VIF를 한 번에 계산(상수항 제외한 결과가 반환된다)
     vif = my_stats.compute_vif(data, columns=xnames)
+
+    # 일반 OLS 통계량일 위치 인덱스로 접근하기 위해 배열로 변환
+    params = np.asarray(fit.params)
+    bse = np.asarray(fit.bse)
+    tvalues = np.asarray(fit.tvalues)
+    pvalues = np.asarray(fit.pvalues)
+
+    # -- (신규) cov_type 지정 시 로버스트 표준오차, t, 유의확율을 별도로 계산 --
+    # 일반값을 덮어쓰지 않고 비교용으로 따로 보관한다. 
+    # t는 정의상 계수/표준오차이므로 표준오차가 로버스트로 바뀌면 t도 함께 바뀐다 (t = B / 로버스트 SE)
+    # 유의확률도 이 로버스트 t에서 나온다. 따라서 로버스트 SE, t, 유의확률을 한세트로 가져온다.
+    # 로버스트 결과 객체 역시 이름 없는 배열로 반환되므로 동일하게 위치 인덱스로 접근한다.
+
+    if hc3:
+        robust = fit.get_robustcov_results(cov_type='HC3')
+        rob_bse = np.asarray(robust.bse)
+        rob_tvalues = np.asarray(robust.tvalues)
+        rob_pvalues = np.asarray(robust.pvalues)
+
+
 
     # --- 2) 독립변수별 계수 및 통계량 정리 ---
     variables = []  # 독립변수를 저장할 빈 리스트
     for x in xnames:
         # 미리 계산해 둔 VIF 표에서 해당 독립 변수의 값을 조회
         vif_value = vif.loc[x, "VIF"]
+        i = exog_names.index(x)  # 상수항을 포함한 전체 순서에서의 위치
+        b = float(params[i])     # 비표준화 회귀계수 (B)
+        # 표준화 회귀계수(β) = B X (독립변수 표준편차 / 종속변수 표준편차)
+        beta = b * (data[x].std(ddof=1) / data[yname].std(ddof=1))
 
-        # 계산 관련 수치는 요약 문자열(반올림된 표시값)을 파싱하는 대신 fit 객체에서 완전한 정밀도의 실수값으로 직접 가져온다.
-        variables.append({
+        if hc3:
+            # 로버스트 비교 형식 : B(양쪽 공유) + 일반(SE, t, 유의확률) + 로버스트(SE, t, 유의확률)를 대칭으로 배치한다.
+            # 각 방식의 SE, t, 유의확률이 한 세트로 대응된다.
+            row = {
+            "종속변수" : yname,                                                                 
+            "독립변수" : x,                                                                     
+            "B": b,                                                               
+            "표준오차": bse[i],
+            "표준오차(HC3)" : rob_bse[i],                                                            
+            "β": beta, 
+            "t": tvalues[i],
+            "t(HC3)": rob_tvalues[i],                                                             
+            "유의확률": pvalues[i],
+            "유의확률(HC3)":rob_pvalues[i],                                                 
+            "공차": 1/ vif_value,                                                     
+            "VIF": vif_value
+            }
+        else:
+            row = {
             "종속변수" : yname,                                                                 # 종속변수 이름
             "독립변수" : x,                                                                     # 독립변수 이름
-            "B": fit.params[x],                                                                # 비표준화 회귀계수(B)
-            "표준오차": fit.bse[x],                                                             # 계수 표준오차
-            # 표준화 회귀계수(β) = B X (독립변수 표준편차 / 종속변수 표준편차)
-            "β": (float(fit.params[x]) * (data[x].std(ddof=1) / data[yname].std(ddof=1))), 
-            "t": fit.tvalues[x],                                                               # T-통계량
-            "유의확률": fit.pvalues[x],                                                         # 계수 유의확률
+            "B": b,                                                                # 비표준화 회귀계수(B)
+            "표준오차": bse[i],                                                             # 계수 표준오차
+            "β": beta, 
+            "t": tvalues[i],                                                               # T-통계량
+            "유의확률": pvalues[i],                                                         # 계수 유의확률
             "공차": 1/ vif_value,                                                               # 공차
-            "VIF": vif_value                                                                    # 분산팽창계수
-        })
-    return DataFrame(variables)
+            "VIF": vif_value 
+                }
+        
+        variables.append(row)
+
+
+    # --- 2) 독립변수별 계수 및 통계량 정리 ---
+    vdf = DataFrame(variables)
+
+    # 베타의 절대값으로 내림차순 정렬 후 리턴(영향력이 큰 변수가 위로 오도록)
+    vdf = vdf.sort_values("β", key=abs, ascending=False).reset_index(drop=True)
+    return vdf
+
 
 
 #====================================
 # 회귀계수 보고 문장 생성 함수 
 #==================================== 
-def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=None):
+def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=None, hc3=False):
     """독립변수별 회귀계수 해석 문장을 markdown 불릿 리스트로 생성해 반환한다.
 
     Args:
@@ -500,6 +549,7 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
         log_x (list | None): log 변환을 적용한 독립변수 이름 리스트 (기본값: None).
         log1p_y (bool): 종속변수에 log1p(=ln(1+y)) 변환을 적용했는지 여부 (기본값: False).
         log1p_x (list | None): log1p 변환을 적용한 독립변수 이름 리스트 (기본값: None).
+        hc3 (bool) : True면 HC3 로버스트 표준오차를 사용한다. (기본값 : False)
 
     Returns:
         str: 독립변수별 해석 문장 불릿 리스트. `IPython.display.Markdown`으로 감싸 출력하면 좋다.
@@ -534,6 +584,15 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
     else:
         y_target = yname
 
+    # -- (신규) hc3=True인 경우 로버스트 표준오차 기반 t/유의확률로 교체 --
+    # 회귀계수(B)는 그대로이고, 표준오차만 이분산에 강건한 HC3로 바뀐다.
+    # t = B / 로버스트 SE 이므로 t와 유의확률도 한세트로 함께 바뀐다.
+    # 로버스트 결과 객체는 이름없는 배열을 반환하으모 위치 인덱스로 접근한다.
+    if hc3:
+        robust = fit.get_robustcov_results(cov_type='HC3')
+        rob_tvalues = np.asarray(robust.tvalues)
+        rob_pvalues = np.asarray(robust.pvalues)
+
     # --- 2) 문장 템플릿 구성 (독립변수마다 반복 적용) ---
     line_template = (
         "- **{x}**의 회귀계수는 **B = {B}**으로 나타났으며, "
@@ -551,8 +610,16 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
         x_is_log = x in log_x
         x_pct = x_is_log or x_is_log1p    # 독립변수가 비율(%) 증가 기준인가
         B = fit.params[x]                 # 비표준화 회귀계수(B)
-        t = fit.tvalues[x]                # t-통계량
-        p = fit.pvalues[x]                # 계수 유의확률
+
+        if hc3:
+            # 로버스트(HC3) 표준오차에서 나온 t, 유의확률로 유의성을 판정한다.
+            i= fit.model.exog_names.index(x)  # 상수항을 포함한 전체 순서에서의 위히
+            t= float(rob_tvalues[i])  # 로버스트 t (=B / 로버스트 SE)
+            p = float(rob_pvalues[i]) # 로버스트 유의확률
+
+        else:
+            t = fit.tvalues[x]                # t-통계량
+            p = fit.pvalues[x]                # 계수 유의확률
 
         # 유의성 판정 (유의수준 0.05 기준)
         if p < 0.05:
@@ -571,18 +638,18 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
             direction = "증가"
         else:
             direction = "감소"
-    
-       # 독립변수 변화 표현: log1p는 (1+x)가 1% 증가, log는 x가 1% 증가, 원변은 x가 1 증가
+        
+        # 독립변수 변화 표현: log1p는 (1+x)가 1% 증가, log는 x가 1% 증가, 원변은 x가 1 증가
         if x_is_log1p: x_change = f"**(1+{x})가 1% 증가**할 때"
         elif x_is_log: x_change = f"**{x}가 1% 증가**할 때"
         else:  x_change = f"**{x}가 1 증가**할 때"
 
         # 효과 크기: x·y가 각각 비율(%) 기준인지에 따라 값·단위가 정해진다
         if not x_pct and not y_pct:
-        # 원본 → 원본
+            # 원본 → 원본
             mag, unit, approx = f"{abs(B):.2f}", "", ""
         elif x_pct and not y_pct:
-        # 독립변수만 로그 → 1% 증가당 절대 변화 ≈ B×ln(1.01)
+            # 독립변수만 로그 → 1% 증가당 절대 변화 ≈ B×ln(1.01)
             mag, unit, approx = f"{abs(B * np.log(1.01)):.3f}", "", "약 "
         elif not x_pct and y_pct:
             # 종속변수만 로그 → (e^B - 1)×100 %
@@ -611,8 +678,15 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
                 effect=effect,
             ))     
     
-    # --- 4) log1p 사용 시 해석 주의 각주 첨부 ---
+    # --- 4) 로버스트 표준오차 및 log1p 사용 시 해석 주의 각주 첨부 ---
     report = "\n".join(lines)
+
+    if hc3:
+        report += (
+            "\n\n> ※ 위 **t**와 **유의확률**은 등분산 가정이 충족되지 않은 경우를 대비해 "
+            "**HC3 로버스트 표준오차**로 계산한 값이다. 회귀계수(B)와 효과 크기 해석은 "
+            "일반 OLS와 동일하며, 표준오차만 이분산에 강건하게 보정되어 유의성 판정이 달라질 수 있다."
+        )
 
     uses_log1p = (y_kind == "log1p") or bool(log1p_x)
     if uses_log1p:
@@ -623,3 +697,129 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
         )
 
     return report
+
+
+#====================================
+# 선형회귀 일괄 처리 함수 정의 
+#==================================== 
+def auto_ols(data, y, summary=False, report=True,
+             log_y=False, log_x=None, log1p_y=False, log1p_x=None,
+             test=True, plot=False, width=1280, height=640):
+    """회귀모델 적합부터 보고서 출력·가정 검정까지 한 번에 수행한다.
+
+    Args:
+        data: 독립변수와 종속변수를 모두 포함하는 데이터프레임.
+        y: 종속변수로 사용할 컬럼명.
+        summary (bool): 적합 모델의 statsmodels 요약 통계량 출력 여부 (기본값: False).
+        report (bool): 모형 적합도 보고서(회귀계수표·해석) 출력 여부 (기본값: True).
+        log_y (bool): 종속변수에 log 변환을 적용했는지 여부 (기본값: False).
+        log_x (list | None): log 변환을 적용한 독립변수 이름 리스트 (기본값: None).
+        log1p_y (bool): 종속변수에 log1p 변환을 적용했는지 여부 (기본값: False).
+        log1p_x (list | None): log1p 변환을 적용한 독립변수 이름 리스트 (기본값: None).
+        test (bool): 회귀모형 가정 검정 수행 여부 (기본값: True).
+        plot (bool): 가정 검정 시 그래프를 함께 그릴지 여부 (기본값: False).
+        width (int): 그래프 너비 (기본값: 1280).
+        height (int): 그래프 높이 (기본값: 640).
+
+    Returns:
+        적합이 완료된 회귀분석 결과 객체.
+    """
+
+    # --- 1) 회귀모델 적합 ---
+    fit = fit_model(data, y, summary=summary)
+
+    # 빈 줄 출력 (출력 결과의 여백을 위함)
+    print()
+
+    # --- 2) 회귀모형 적합도 보고서 출력 ---
+    # 등분산성 가정 확인
+    lm_stat, lm_p, f_stat, f_p = het_breuschpagan(fit.resid, fit.model.exog)
+    # 등분산 충족시 True, 위배시 False (유의수준 0.05 기준)
+    homoscedasticity = bool(float(f_p) >= 0.05)
+
+    if report:
+        display(Markdown("#### ▶ 모형 적합도"))
+        # 회귀계수 보고 표(hc3는 등분산 충족 아닐 시 True로 설정)
+        display(report_variables(fit, data, hc3=not homoscedasticity))
+        display(Markdown(report_fitness(fit, log_y=log_y, log_x=log_x,
+                                        log1p_y=log1p_y, log1p_x=log1p_x)))
+
+    # --- 3) 회귀모형 가정 검정 ---
+    # 보고서와 가정 검정이 모두 출력되는 경우, 구분을 위해 수평선 추가
+    if report and test:
+        display(Markdown("---"))
+
+    # 회귀모형 가정 검정 (선형성 → 정규성 → 등분산성 → 독립성)
+    if test:
+        display(Markdown("#### ▶ 회귀모형 가정 검정"))
+        display(Markdown("##### 1) 선형성 검정"))
+        test_linear(fit, plot=plot, width=width, height=height)
+        display(Markdown("##### 2) 정규성 검정"))
+        test_normal(fit, plot=plot, width=width, height=height)
+        display(Markdown("##### 3) 등분산성 검정"))
+        test_equalvar(fit)
+        display(Markdown("##### 4) 독립성 검정"))
+        test_independent(fit)
+
+    # --- 4) 최종 적합 모델 객체 반환 ---
+    return fit
+
+
+#====================================
+# 독립변수의 영향력 순위 시각화 함수 
+#==================================== 
+def plot_beta(fit, data, palette=None, title=None, xlabel=None, ylabel=None, width=1280, height=None, save_path=None):
+    """
+    표준화 회귀계수(β)를 가로 막대그래프로 시각화해 독립변수의 영향력 순위를 보여준다.
+
+    β의 절대값 순위는 종속변수에 미치는 영향력의 순위를 의미한다(영향력의 절대적 크기는 아니다).
+    막대는 'report_variables'가 정렬해 둔 |β| 내림차순 그대로 위에서 아래로 배치되며,
+    계수의 부호에 따라 색을 달리하고 막대 끝에 β 값을 표기한다.
+
+    Args:
+        fit: 'fit_model' 함수로 적합된 회귀분석 결과 객체
+        data: 독립변수와 종속변수를 모두 포함하는 데이터프레임
+        palette (dict): 부호별 막대색상. None이면 {+:파랑, -:빨강} (기본값:None)
+        title (str): 그래프 제목 (기본값:None)
+        xlabel (str): x축 레이블 (기본값:None → '표준화 계수(β)')
+        ylabel (str): y축 레이블 (기본값:None → '독립변수')
+        width (int): 캔버스 가로 픽셀 (기본값: 1280)
+        height (int): 캔버스 세로 픽셀. None이면 독립변수 수 x 80으로 자동 계산 (기본값: None)
+        save_path (str): 이미지 저장 경로 (기본값:None)
+    """
+    # --- 1) 시각화용 데이터 전처리 ---
+    # 회귀계수 표 리턴받기 - 베타값 자체는 hc3 여부와 무관하므로 hc3=False로 호출한다.
+    vdf = report_variables(fit, data, hc3=False)
+    rdf = vdf[["독립변수", "β"]].copy()
+    rdf["부호"] = np.where(rdf["β"] > 0, "+", "-")   # 계수 부호(색상 구분용)
+
+    # 독립변수가 많을수록 막대가 촘촘해지므로, 변수 하나당 80px씩 세로 공간을 확보한다
+    if height is None:
+        height = len(rdf) * 80
+
+    # 부호별 기본 색상: 양(+)은 파랑, 음(-)은 빨강
+    if palette is None:
+        palette = {"+": "#0066ff", "-": "#ff3333"}
+
+
+    # --- 2) 그래프 초기화 ---
+    fig, ax = my_plot.init(width=width, height=height, title=title,
+                        xlabel=xlabel if xlabel else "표준화 계수(β)",
+                        ylabel=ylabel if ylabel else "독립변수")
+
+
+    # --- 3) 가로 막대그래프 (값 축을 x로 두면 가로형이 된다) ---
+    my_plot.barplot(rdf, x="β", y="독립변수", hue="부호", palette=palette, ax=ax)
+
+
+    # --- 4) 막대 끝에 β 값 표기 ---
+    # 양수 막대는 오른쪽 끝의 바깥쪽(ha="left"), 음수 막대는 왼쪽 끝의 바깥쪽(ha="right")에
+    # 붙도록 정렬 기준을 뒤집고, 막대와 겹치지 않게 부호 방향으로 살짝 띄운다.
+    for i in rdf.index:
+        beta = rdf.loc[i, "β"]
+        ax.text(x=beta + 0.001 * np.sign(beta), y=i, s=f"{beta:.2f}",
+                va="center", ha="left" if beta > 0 else "right", color="black")
+
+
+    # --- 5) 그래프 표시 (외부 ax를 받은 경우 표시는 호출자에게 맡긴다) ---
+    my_plot.show(save_path=save_path)
