@@ -112,14 +112,14 @@ SCALERS = {
     'maxabs' : MaxAbsScaler
 }
 
-def log_transfrom(df, log_columns=None, reflect_columns=None, verbose=True):
+def log_transform(df, log_columns=None, reflect_columns=None, verbose=True):
     """
     로그변환 함수
 
     Args:
         df (DataFrame): 변환을 적용할 데이터프레임
         log_columns (list, optional): 로그 변환할(우측 꼬리) 컬럼명 리스트 (기본값 : None)
-        reflect_colums (list, optional): 반사 후 로그 변환할(좌측 꼬리) 컬럼명 리스트 (기본값: None)
+        reflect_columns (list, optional): 반사 후 로그 변환할(좌측 꼬리) 컬럼명 리스트 (기본값: None)
         verbose (bool): 컬럼별 변환식, 역변환식과 왜도 변화를 출력할지 여부 (기본값: True)
 
     Return:
@@ -132,7 +132,7 @@ def log_transfrom(df, log_columns=None, reflect_columns=None, verbose=True):
     # --- 2) 우측 꼬리 컬럼 변환: log(1+x) ---
     # 값이 0인 경우 log(0) = -inf 가 되므로 log(1+x) 를 사용한다
     if log_columns:
-        for c in reflect_columns:
+        for c in log_columns:
             result[c] = np.log1p(df[c])
             report.append([c, '우측 꼬리', 'log(1+x)', 'exp(y)-1'])
 
@@ -199,11 +199,11 @@ def inverse_log_transform(df, log_columns=None, reflect_columns=None, verbose=Tr
         print(f'{"컬럼":10s}{"꼬리방향":10s}{"역변환식":24s}{"값의 범위":>28s}')
         print('-' * 76)
 
-        for c, side, func, inverse in report:
+        for c, side, inverse in report:
             before = f'{df[c].min():2f}~{df[c].max():.2f}'
             after = f'{result[c].min():2f}~{result[c].max():.2f}'
             change = f'{before} -> {after}'
-            print(f'{c:10s}{side:10s}{func:22s}{inverse:24s}{change:>26s}')
+            print(f'{c:10s}{side:10s}{inverse:24s}{change:>26s}')
 
     # --- 5) 역변환이 적용된 데이터프레임 반환 ---
     return result
