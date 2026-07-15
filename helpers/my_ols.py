@@ -704,14 +704,15 @@ def report_variables_text(fit, log_y=False, log_x=None, log1p_y=False, log1p_x=N
 #==================================== 
 def auto_ols(data, y, summary=False, report=True,
              log_y=False, log_x=None, log1p_y=False, log1p_x=None,
-             test=True, plot=False, width=1280, height=640):
+             test=True, plot=False, width=1280, height=640,
+             backward=False, alpha=0.05):
     """회귀모델 적합부터 보고서 출력·가정 검정까지 한 번에 수행한다.
 
     Args:
         data: 독립변수와 종속변수를 모두 포함하는 데이터프레임.
         y: 종속변수로 사용할 컬럼명.
         summary (bool): 적합 모델의 statsmodels 요약 통계량 출력 여부 (기본값: False).
-        report (bool): 모형 적합도 보고서(회귀계수표·해석) 출력 여부 (기본값: True).
+        report (bool): 모형 적합도 보고서 출력 여부 (기본값: True).
         log_y (bool): 종속변수에 log 변환을 적용했는지 여부 (기본값: False).
         log_x (list | None): log 변환을 적용한 독립변수 이름 리스트 (기본값: None).
         log1p_y (bool): 종속변수에 log1p 변환을 적용했는지 여부 (기본값: False).
@@ -720,22 +721,58 @@ def auto_ols(data, y, summary=False, report=True,
         plot (bool): 가정 검정 시 그래프를 함께 그릴지 여부 (기본값: False).
         width (int): 그래프 너비 (기본값: 1280).
         height (int): 그래프 높이 (기본값: 640).
+        backward (bool): True이면 후진소거법으로 유의하지 않은 독립변수를 제거한 뒤
+                         최종 모델을 적합한다 (기본값: False).
+        alpha (float): 후진소거법의 변수 제거 기준 유의수준 (기본값: 0.05).
 
     Returns:
         적합이 완료된 회귀분석 결과 객체.
     """
 
-    # --- 1) 회귀모델 적합 ---
-    fit = fit_model(data, y, summary=summary)
+    # # --- 1) 회귀모델 적합 ---
+    # fit = fit_model(data, y, summary=summary)
+
+    # # 빈 줄 출력 (출력 결과의 여백을 위함)
+    # print()
+
+    # # --- 2) 회귀모형 적합도 보고서 출력 ---
+    # # 등분산성 가정 확인
+    # lm_stat, lm_p, f_stat, f_p = het_breuschpagan(fit.resid, fit.model.exog)
+    # # 등분산 충족시 True, 위배시 False (유의수준 0.05 기준)
+    # homoscedasticity = bool(float(f_p) >= 0.05)
 
     # 빈 줄 출력 (출력 결과의 여백을 위함)
     print()
 
-    # --- 2) 회귀모형 적합도 보고서 출력 ---
-    # 등분산성 가정 확인
-    lm_stat, lm_p, f_stat, f_p = het_breuschpagan(fit.resid, fit.model.exog)
-    # 등분산 충족시 True, 위배시 False (유의수준 0.05 기준)
-    homoscedasticity = bool(float(f_p) >= 0.05)
+    while True:
+        # --- 1) 회귀모델 적합 (summary는 최종 모델에서만 출력한다) ---
+        fit = fit_model(data, y)
+
+        # --- 2) 등분산성 가정 확인 ---
+        lm_stat, lm_p, f_stat, f_p = het_breuschpagan(fit.resid, fit.model.exog)
+        # 등분산 충족시 True, 위배시 False (유의수준 0.05 기준)
+        homoscedasticity = bool(float(f_p) >= 0.05)
+
+        if not backward:
+            break  # 후진소거법이 아니면 반복문 종료
+
+        report_vars = report_variables(fit, data, hc3=not homoscedasticity)
+        # 등분산이면 일반 OLS의 유의확률, 위배되면 HC3 유의확률을 제거 기준으로 삼는다
+        pvalues = report_vars["유의확률"] if homoscedasticity else report_vars["유의확률(HC3)"]
+
+        # 독립변수가 하나뿐이거나 모두 유의하면 종료
+        if len(pvalues) <= 1 or pvalues.max() <= alpha:
+            break
+
+        # 유의확률이 가장 큰(=가장 유의하지 않은) 독립변수를 하나만 제거한다.
+        # 여러 개를 한꺼번에 지우면, 변수 간 상관 때문에 원래는 유의해졌을 변수까지 사라진다.
+        worst = report_vars.loc[pvalues.idxmax(), "독립변수"]
+        print(f"유의하지 않은 독립변수 제거 → {worst} (p = {pvalues.max():.4f})")
+        data = data.drop(columns=[worst])
+
+    # 최종 모델의 요약 통계량 출력
+    if summary:
+        print(fit.summary())
 
     if report:
         display(Markdown("#### ▶ 모형 적합도"))
