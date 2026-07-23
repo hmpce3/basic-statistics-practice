@@ -11,6 +11,7 @@ from . import my_qtcheck     # 데이터 품질 점검 관련 함수 모듈
 from . import my_stats       # 통계 분석 관련 함수 모듈
 from . import my_prep        # 데이터 전처리 관련 함수 모듈
 from . import my_ols         # 선형회귀 관련 함수 모듈
+from . import my_logit       # 로지스틱 회귀 관련 함수 모듈
 
 # -----------------------------------
 # 한글 폰트 설정
