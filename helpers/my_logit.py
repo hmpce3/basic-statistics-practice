@@ -635,3 +635,71 @@ def report_performance(fit, threshold=0.5, plot=True, palette=None,
         plot_confusion(fit, threshold=threshold, palette=palette, ax=ax[0])
         plot_roc(fit, palette=palette, ax=ax[1])
         my_plot.show(save_path=save_path)
+
+
+def test_linear(fit, data, alpha=0.05):
+    """Box-Tidwell 검정으로 연속형 독립변수의 로짓 선형성을 점검한다.
+
+    독립변수 x에 `x × ln(x)` 항을 하나씩 추가해 그 항이 유의한지 본다.
+    유의하면(p < alpha) 로짓이 직선이 아니라는 뜻이므로 변환·제곱항·구간화가 필요하다.
+    이분형(더미) 변수는 두 점을 잇는 선이 언제나 직선이므로 검정 대상에서 제외한다.
+
+    Args:
+        fit: `fit_model` 함수로 적합된 회귀분석 결과 객체.
+        data: 회귀분석에 사용한 원본 데이터프레임. 독립변수와 종속변수를 모두
+            포함해야 한다.
+        alpha (float): 유의수준 (기본값: 0.05).
+    """
+    # --- 1) 검정 대상 결정 (상수항 제외, 연속형만) ---
+    yname = fit.model.endog_names
+
+    xnames = []
+    for name in fit.model.exog_names:
+        if name != "const":
+            xnames.append(name)
+
+    targets = []
+    for x in xnames:
+        # 값의 종류가 3가지 이상인 변수만 연속형으로 간주한다
+        if data[x].nunique() > 2:
+            targets.append(x)
+
+    # --- 2) Box-Tidwell 검정 (변수마다 x*ln(x) 항을 하나씩 추가) ---
+    rows = []
+    for x in targets:
+        bt_data = data[xnames].copy()       # 독립변수만 복사
+        base = bt_data[x]                   # 원본 독립변수 값
+
+        # 최소값이 0 이하이면 ln 정의역(양수)을 맞추기 위해 평행이동 필요
+        shifted = bool(base.min() <= 0)
+        if shifted:
+            base = base - base.min() + 1
+
+        # Box-Tidwell 항 생성: x × ln(x)
+        bt_data["_bt_term"] = base * np.log(base)
+
+        # Logit 모델 적합 후 Box-Tidwell 항의 z·p값으로 선형성 판정
+        bt_fit = Logit(data[yname], add_constant(bt_data)).fit(disp=0)
+        z = float(bt_fit.tvalues["_bt_term"])
+        p = float(bt_fit.pvalues["_bt_term"])
+        linearity = bool(p >= alpha)
+
+        # 선형성 판정에 따라 결론 문구를 달리한다
+        if linearity:
+            conclusion = "귀무가설 채택 → 로짓 선형성 위배 근거 없음"
+        else:
+            conclusion = "대립가설 채택 → 로짓 선형성 위배(변환 필요)"
+
+        # 독립변수별 결과를 딕셔너리로 정리해 리스트에 추가
+        rows.append({
+            "z": round(z, 4),
+            "p-value": round(p, 4),
+            "linearity": linearity,
+            "위치이동": shifted,
+            "result": conclusion,
+            "독립변수": x,
+        })
+
+    # 결과표 생성 및 출력
+    result_df = DataFrame(rows).set_index("독립변수")
+    display(result_df)   # 결과표 출력
