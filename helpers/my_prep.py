@@ -7,110 +7,37 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, Ma
 from sklearn.preprocessing import LabelEncoder
 from . import my_stats
 
+# scaling() 에서 사용할 스케일러 이름과 클래스의 매핑
+SCALERS = {
+    'standard': StandardScaler,
+    'minmax': MinMaxScaler,
+    'robust': RobustScaler,
+    'maxabs': MaxAbsScaler,
+}
+
+# =====================================================================
+# 형태 변환
+# =====================================================================
 def long2wide(df, hue, values, dropna=True):
     """
-    long format 데이터프레임을 group 단위로 컬럼을 펼처 wide format으로 변환하는 함수
+    long format 데이터프레임을 group 단위로 컬럼을 펼쳐 wide format으로 변환하는 함수
 
     Args:
-        - df : 변환할 데이터 프레임
-        - hue : 펼칠 기준이 되는 그룹 열 이름(각 값이 새 열이 됨)
-        - values : 펼칠 값이 담긴 열 이름
-        - dropna : 결측치 행을 결과에서 제외할 지 여부 (기본값 : True)
+        - df: 변환할 데이터프레임
+        - hue: 펼칠 기준이 되는 그룹 열 이름 (각 값이 새 열이 됨)
+        - values: 펼칠 값이 담긴 열 이름
+        - dropna: 결측치 행을 결과에서 제외할지 여부 (기본값 True)
 
     Returns
         - wide format으로 변환된 데이터프레임
     """
     wide = pivot_table(data=df,
-                       index=df.groupby(hue).cumcount(),
-                       columns=hue, values=values, dropna=dropna)
-    
+                       index=df.groupby(hue, observed=True).cumcount(),
+                       columns=hue, values=values, dropna=dropna, observed=True)
     wide.columns.name = None
     wide.index.name = None
     return wide
 
-#==================================
-# 다중 공선성 제거
-#==================================
-from pandas import pivot_table
-from . import my_stats
-
-
-def reduce_vif(df, columns=None, threshold=10.0, verbose=True):
-    """
-    다중 공선성이 사라질 때까지 VIF 가 가장 큰 변수를 하나씩 반복 제거하는 함수
-
-    Args:
-        df (DataFrame): 다중 공선성을 제거할 변수들이 포함된 데이터프레임
-        columns (list, optional): 다중 공선성을 판단/제거할 컬럼명 리스트.
-                                  None 이면 df 의 수치형 컬럼을 자동으로 선택한다 (기본값: None)
-        threshold (float): 다중 공선성 판단 기준이 되는 VIF 임계값 (기본값: 10.0)
-        verbose (bool): 제거 과정과 결과를 단계별로 출력할지 여부 (기본값: True)
-
-    Returns:
-        DataFrame: 대상 변수들의 VIF 가 모두 threshold 미만이 되도록 일부 변수가
-                   제거된 데이터프레임. 대상이 아닌 컬럼은 원래 순서대로 보존된다.
-    """
-
-    # --- 1) 처리 대상 컬럼 결정 ---
-    # 처리 대상 컬럼 결정: 지정이 없으면 수치형 컬럼만 자동 선택
-    if columns is None:
-        targets = list(df.select_dtypes(include='number').columns)
-    else:
-        missing = []
-        for c in columns:
-            if c not in df.columns:
-                missing.append(c)
-
-        if missing:
-            raise KeyError(f'df 에 존재하지 않는 컬럼입니다: {missing}')
-        targets = list(columns)
-
-    # 컬럼 이름의 오름차순으로 정렬
-    targets.sort()
-
-    # 대상에서 제외되는 컬럼(종속변수, 명목형 등)은 그대로 보존하기 위해 컬럼이름을 따로 기록
-    keep = []
-    for c in df.columns:
-        if c not in targets:
-            keep.append(c)
-
-    # --- 2) 반복 제거 과정 ---
-    work = df[targets].copy()       # 원본을 보존하기 위해 대상 변수만 복사본으로 작업
-    step = 0                        # 반복 단계 카운터
-
-    while True:
-        vif = my_stats.compute_vif(work)
-        max_vif = vif['VIF'].max()
-
-        # 종료 조건: 가장 큰 VIF도 기준 미만이거나 남은 변수가 한개라면 종료
-        if max_vif < threshold or len(work.columns) <= 1:
-            print(f'\n완료! 남은 변수: {list(work.columns)}')
-            print(f'최대 VIF = {max_vif:.2f}')
-            break
-
-        # 가장 VIF 가 큰 변수를 찾아 제거하고 다시 반복
-        worst = vif['VIF'].idxmax()
-        step += 1
-        if verbose:
-            print(f'[{step}단계] {worst} 제거 (VIF = {max_vif:.1f})')
-        work = work.drop(columns=[worst])
-
-    # --- 3) 보존 대상 컬럼과 합쳐 원래 컬럼 순서를 유지해 반환 ---
-    survived = []
-    for c in df.columns:
-        if c in keep or c in work.columns:
-            survived.append(c)
-
-    return df[survived]
-
-
-# scaling()에서 사용할 스케일러 이름과 클래스의 매핑
-SCALERS = {
-    'standard' : StandardScaler,
-    'minmax' : MinMaxScaler,
-    'robust' : RobustScaler,
-    'maxabs' : MaxAbsScaler
-}
 
 # =====================================================================
 # 로그 변환 — 치우친 분포를 대칭에 가깝게 편다
@@ -187,8 +114,7 @@ def log_transform(df, log_columns=None, log1p_columns=None, reflect_columns=None
 # =====================================================================
 def inverse_log_transform(df, log_columns=None, log1p_columns=None,
                           reflect_columns=None, verbose=True):
-    """
-    log_transform() 으로 변환된 컬럼을 원래 값(단위)으로 되돌리는 함수
+    """log_transform() 으로 변환된 컬럼을 원래 값(단위)으로 되돌리는 함수
 
     Args:
         df (DataFrame): 역변환을 적용할 데이터프레임
@@ -240,6 +166,10 @@ def inverse_log_transform(df, log_columns=None, log1p_columns=None,
     # --- 6) 역변환이 적용된 데이터프레임 반환 ---
     return result
 
+
+# =====================================================================
+# 라벨링 — 범주형 문자열을 정수로 바꾼다
+# =====================================================================
 def labeling(df, columns, save_path=None, verbose=True):
     """
     지정한 범주형 컬럼들의 값을 0부터 시작하는 정수로 변환하는 함수
@@ -255,8 +185,8 @@ def labeling(df, columns, save_path=None, verbose=True):
         DataFrame: 라벨링이 적용된 데이터프레임 (원본은 변경되지 않는다)
     """
     # --- 1) 작업 준비 ---
-    result = df.copy()      # 원본을 보존하기 위해 복사본으로 작업
-    encoders = {}           # 역변환과 test 데이터 적용을 위해 컬럼별 인코더를 보관
+    result = df.copy()    # 원본을 보존하기 위해 복사본으로 작업
+    encoders = {}         # 역변환과 test 데이터 적용을 위해 컬럼별 인코더를 보관
 
     # --- 2) 컬럼별 라벨 인코딩 (문자열 -> 0부터 시작하는 정수) ---
     for c in columns:
@@ -267,7 +197,7 @@ def labeling(df, columns, save_path=None, verbose=True):
     # --- 3) 변환 내역 출력 (원래 값 -> 부여된 정수) ---
     if verbose:
         for c in columns:
-            # classes_의 순서가 곧 부여된 정숫값이므로 짝지어 출력한다
+            # classes_ 의 순서가 곧 부여된 정수값이므로 짝지어 출력한다
             pairs = []
             for i, v in enumerate(encoders[c].classes_):
                 pairs.append(f'{v}={i}')
@@ -279,7 +209,8 @@ def labeling(df, columns, save_path=None, verbose=True):
     if save_path:
         folder = os.path.dirname(save_path)
         if folder:
-            os.makedirs(folder, exist_ok=True)  # 경로에 없는 폴더가 있으면 만들어 준다
+            # 경로에 없는 폴더가 있으면 만들어 준다
+            os.makedirs(folder, exist_ok=True)
 
         joblib.dump(encoders, save_path)
 
@@ -288,8 +219,102 @@ def labeling(df, columns, save_path=None, verbose=True):
 
     # --- 5) 라벨링이 적용된 데이터프레임 반환 ---
     return result
-            
 
+
+# =====================================================================
+# 결측치 처리 — 비어 있는 값을 삭제하거나 다른 값으로 채운다
+# =====================================================================
+def replace_missing(df, columns=None, method='mean', value=None, verbose=True):
+    """
+    지정한 컬럼들의 결측치를 삭제하거나 다른 값으로 대체하는 함수
+
+    Args:
+        df (DataFrame): 결측치를 처리할 데이터프레임
+        columns (list, optional): 결측치를 처리할 컬럼명 리스트.
+            None 이면 결측치가 있는 컬럼을 자동으로 선택한다 (기본값: None)
+        method (str): 결측치를 어떻게 처리할지 지정한다. 대소문자는 구분하지 않는다 (기본값: 'mean')
+            - 'drop':   결측치가 있는 행을 삭제
+            - 'value':  사용자가 value 파라미터로 지정한 고정값
+            - 'mean':   해당 컬럼의 평균   (수치형)
+            - 'median': 해당 컬럼의 중앙값 (수치형)
+            - 'max':    해당 컬럼의 최댓값 (수치형)
+            - 'min':    해당 컬럼의 최솟값 (수치형)
+            - 'mode':   해당 컬럼의 최빈값 (수치형·범주형 모두 가능)
+        value (any, optional): method='value' 일 때 결측치를 대체할 고정값 (기본값: None)
+        verbose (bool): 컬럼별 결측치 개수와 대체값을 출력할지 여부 (기본값: True)
+
+    Returns:
+        DataFrame: 결측치가 처리된 데이터프레임 (원본은 변경되지 않는다)
+    """
+    # --- 1) 처리 대상 컬럼 결정 ---
+    name = method.lower().strip()
+
+    # 처리 대상 컬럼 결정: 지정이 없으면 결측치가 있는 컬럼만 자동 선택
+    # 단, 평균·중앙값·최댓값·최솟값은 수치형에만 쓸 수 있으므로 수치형 컬럼으로 한정한다
+    if columns is None:
+        target = df
+        if name in ['mean', 'median', 'max', 'min']:
+            target = df.select_dtypes(include='number')
+
+        counts = target.isna().sum()
+        columns = list(counts[counts > 0].index)
+
+    # --- 2) 작업 준비 ---
+    result = df.copy()    # 원본을 보존하기 위해 복사본으로 작업
+    report = []           # verbose 출력을 위해 컬럼별 처리 내역을 기록
+
+    # --- 3) 삭제 방식은 행 단위로 한 번에 처리하고 끝낸다 ---
+    # 대상 컬럼 중 하나라도 결측이면 그 행을 통째로 지운다
+    if name == 'drop':
+        result = df.dropna(subset=columns).reset_index(drop=True)
+
+        if verbose:
+            print(f"결측치 처리 방식: 'drop' (대상 컬럼 {len(columns)}개)")
+            print(f'행 수: {len(df)}개 -> {len(result)}개 ({len(df) - len(result)}개 삭제)')
+
+        return result
+
+    # --- 4) 컬럼별 대체값 계산 및 결측치 대체 ---
+    for c in columns:
+        count = df[c].isna().sum()
+
+        # 4-1) method 에 따라 대체값을 정한다
+        if name == 'mean':
+            fill = df[c].mean()
+        elif name == 'median':
+            fill = df[c].median()
+        elif name == 'max':
+            fill = df[c].max()
+        elif name == 'min':
+            fill = df[c].min()
+        elif name == 'mode':
+            # 최빈값은 동점이면 여러 개가 나오므로 첫 번째 값을 사용한다
+            fill = df[c].mode()[0]
+        else:
+            fill = value
+
+        # 4-2) 정해진 값으로 그 컬럼의 결측치를 채운다
+        result[c] = df[c].fillna(fill)
+        report.append([c, count, fill])
+
+    # --- 5) 처리 내역 출력 (컬럼별 결측치 개수와 대체값) ---
+    if verbose:
+        print(f"결측치 처리 방식: '{name}'")
+        print(f'{"컬럼":12s}{"결측치":>14s}{"대체값":>20s}')
+        print('-' * 44)
+
+        for c, count, fill in report:
+            ratio = count / len(df) * 100
+            found = f'{count}개({ratio:.1f}%)'
+            print(f'{c:12s}{found:>12s}{str(fill):>18s}')
+
+    # --- 6) 결측치가 처리된 데이터프레임 반환 ---
+    return result
+
+
+# =====================================================================
+# 이상치 대체 — 극단값을 다른 값으로 바꾼다
+# =====================================================================
 def replace_outlier(df, columns=None, method='bound', value=None, verbose=True):
     """
     지정한 컬럼들의 이상치를 다른 값으로 대체하는 함수
@@ -297,13 +322,13 @@ def replace_outlier(df, columns=None, method='bound', value=None, verbose=True):
     Args:
         df (DataFrame): 이상치를 대체할 데이터프레임
         columns (list, optional): 이상치를 대체할 컬럼명 리스트.
-            None이면 df의 수치형 컬럼을 자동으로 선택한다 (기본값: None)
+            None 이면 df 의 수치형 컬럼을 자동으로 선택한다 (기본값: None)
         method (str): 이상치를 무엇으로 대체할지 지정한다. 대소문자는 구분하지 않는다 (기본값: 'bound')
-            - 'bound': 이상치 경계값.
+            - 'bound':  이상치 경계값. 
             - 'median': 해당 컬럼의 중앙값
-            - 'mean': 해당 컬럼의 평균
-            - 'value': 사용자가 value 파라미터로 지정한 고정값
-        value (number, optional): method='value'일 때 이상치를 대체할 고정값 (기본값: None)
+            - 'mean':   해당 컬럼의 평균
+            - 'value':  사용자가 value 파라미터로 지정한 고정값
+        value (number, optional): method='value' 일 때 이상치를 대체할 고정값 (기본값: None)
         verbose (bool): 컬럼별 이상치 경계와 대체된 개수를 출력할지 여부 (기본값: True)
 
     Returns:
@@ -315,9 +340,9 @@ def replace_outlier(df, columns=None, method='bound', value=None, verbose=True):
         columns = list(df.select_dtypes(include='number').columns)
 
     # --- 2) 작업 준비 ---
-    result = df.copy()      # 원본을 보존하기 위해 복사본으로 작업
+    result = df.copy()    # 원본을 보존하기 위해 복사본으로 작업
     name = method.lower().strip()
-    report = []             # verbose 출력을 위해 컬럼별 대체 내역을 기록
+    report = []           # verbose 출력을 위해 컬럼별 대체 내역을 기록
 
     # --- 3) 컬럼별 이상치 판단 및 대체 ---
     for c in columns:
@@ -332,12 +357,11 @@ def replace_outlier(df, columns=None, method='bound', value=None, verbose=True):
         is_outlier = (df[c] < lower) | (df[c] > upper)
         count = is_outlier.sum()
 
-        # 3-3) method에 따라 대체값을 정하고 이상치를 바꾼다
+        # 3-3) method 에 따라 대체값을 정하고 이상치를 바꾼다
         if name == 'bound':
             # 하한/상한 바깥의 값을 각각 하한/상한으로 잘라낸다
             result[c] = df[c].clip(lower, upper)
             replaced = f'{lower:.2f} 또는 {upper:.2f}'
-
         else:
             if name == 'median':
                 # 이상치를 제외한 정상값만으로 대푯값을 구해야 이상치에 오염되지 않는다
@@ -368,7 +392,9 @@ def replace_outlier(df, columns=None, method='bound', value=None, verbose=True):
     return result
 
 
-
+# =====================================================================
+# 더미 변환 — 범주형을 0/1 컬럼으로 펼친다
+# =====================================================================
 def dummies(df, columns, drop_first=True, verbose=True):
     """
     지정한 범주형 컬럼들을 값의 종류마다 0/1 컬럼으로 펼치는 함수
@@ -396,22 +422,22 @@ def dummies(df, columns, drop_first=True, verbose=True):
             targets.append(c)
 
     # --- 2) 더미 변환 수행 ---
-    # dtype=int를 지정해 True/False가 아닌 0/1로 만든다
+    # dtype=int 를 지정해 True/False 가 아닌 0/1 로 만든다
     result = get_dummies(df, columns=targets, drop_first=drop_first, dtype=int)
 
     # --- 3) 변환 내역 출력 (생성된 더미 컬럼과 생략된 컬럼) ---
     if verbose:
         for c in targets:
-            # 원본에 없고 결과에만 있으면서 'c_'로 시작하는 컬럼이 c로부터 생성된 더미다
+            # 원본에 없고 결과에만 있으면서 'c_' 로 시작하는 컬럼이 c 로부터 생성된 더미다
             created = []
             for new in result.columns:
                 if new not in df.columns and new.startswith(f'{c}_'):
                     created.append(new)
 
-            # drop_first로 빠진 기준 범주가 무엇인지 함께 알려준다
+            # drop_first 로 빠진 기준 범주가 무엇인지 함께 알려준다
             dropped = ''
             if drop_first:
-                dropped = f' (기준: {sorted(df[c].unique())[0]} 제외)'
+                dropped = f'  (기준: {sorted(df[c].unique())[0]} 제외)'
 
             print(f'{c} ({df[c].nunique()}종) -> {len(created)}개: {", ".join(created)}{dropped}')
 
@@ -424,8 +450,80 @@ def dummies(df, columns, drop_first=True, verbose=True):
     return result
 
 
+# =====================================================================
+# 다중공선성 제거 — 서로 겹치는 변수를 걸러낸다
+# =====================================================================
+def reduce_vif(df, columns=None, threshold=10.0, verbose=True):
+    """
+    다중 공선성이 사라질 때까지 VIF 가 가장 큰 변수를 하나씩 반복 제거하는 함수
+
+    Args:
+        df (DataFrame): 다중 공선성을 제거할 변수들이 포함된 데이터프레임
+        columns (list, optional): 다중 공선성을 판단/제거할 컬럼명 리스트.
+            None 이면 df 의 수치형 컬럼을 자동으로 선택한다 (기본값: None)
+        threshold (float): 다중 공선성 판단 기준이 되는 VIF 임계값 (기본값: 10.0)
+        verbose (bool): 제거 과정과 결과를 단계별로 출력할지 여부 (기본값: True)
+
+    Returns:
+        DataFrame: 대상 변수들의 VIF 가 모두 threshold 미만이 되도록 일부 변수가
+                   제거된 데이터프레임. 대상이 아닌 컬럼은 원래 순서대로 보존된다.
+    """
+    # --- 1) 처리 대상 컬럼 결정 ---
+    # 처리 대상 컬럼 결정: 지정이 없으면 수치형 컬럼만 자동 선택
+    if columns is None:
+        targets = list(df.select_dtypes(include='number').columns)
+    else:
+        missing = []
+        for c in columns:
+            if c not in df.columns:
+                missing.append(c)
+
+        if missing:
+            raise KeyError(f'df 에 존재하지 않는 컬럼입니다: {missing}')
+        targets = list(columns)
+
+    # 컬럼이름의 오름차순으로 정렬
+    targets.sort()
+
+    # 대상에서 제외되는 컬럼(종속변수, 명목형 등)은 그대로 보존하기 위해 컬럼이름을 따로 기록
+    keep = []
+    for c in df.columns:
+        if c not in targets:
+            keep.append(c)
+
+    # --- 2) 반복 제거 과정 ---
+    work = df[targets].copy()    # 원본을 보존하기 위해 대상 변수만 복사본으로 작업
+    step = 0                     # 반복 단계 카운터
+
+    while True:
+        vif = my_stats.compute_vif(work)
+        max_vif = vif['VIF'].max()
+
+        # 종료 조건: 가장 큰 VIF도 기준 미만이거나 남은 변수가 한개라면 종료
+        if max_vif < threshold or len(work.columns) <= 1:
+            print(f'\n완료! 남은 변수: {list(work.columns)}')
+            print(f'최대 VIF = {max_vif:.2f}')
+            break
+
+        # 가장 VIF 가 큰 변수를 찾아 제거하고 다시 반복
+        worst = vif['VIF'].idxmax()
+        step += 1
+        if verbose:
+            print(f'[{step}단계] {worst} 제거 (VIF = {max_vif:.1f})')
+        work = work.drop(columns=[worst])
+
+    # --- 3) 보존 대상 컬럼과 합쳐 원래 컬럼 순서를 유지해 반환 ---
+    survived = []
+    for c in df.columns:
+        if c in keep or c in work.columns:
+            survived.append(c)
+
+    return df[survived]
 
 
+# =====================================================================
+# 정규화 — 변수들의 값의 범위를 통일한다
+# =====================================================================
 def scaling(df, columns=None, method='standard', save_path=None, verbose=True):
     """
     지정한 컬럼들의 값의 범위(스케일)를 통일하는 함수
@@ -437,9 +535,9 @@ def scaling(df, columns=None, method='standard', save_path=None, verbose=True):
         method (str): 사용할 스케일러 이름. 대소문자와 뒤의 'Scaler' 는 무시하므로
             'standard', 'Standard', 'StandardScaler' 를 모두 같게 취급한다 (기본값: 'standard')
             - 'standard': (x - 평균) / 표준편차 -> 평균 0, 표준편차 1
-            - 'minmax': (x - 최소) / (최대 - 최소) -> 0 ~ 1
-            - 'robust': (x - 중앙값) / IQR -> 이상치의 영향을 덜 받음
-            - 'maxabs': x / 최대|x| -> -1 ~ 1 (0을 보존하므로 희소 데이터에 사용)
+            - 'minmax':   (x - 최소) / (최대 - 최소) -> 0 ~ 1
+            - 'robust':   (x - 중앙값) / IQR -> 이상치의 영향을 덜 받음
+            - 'maxabs':   x / |최대| -> -1 ~ 1 (0을 보존하므로 희소 데이터에 사용)
         save_path (str, optional): 학습된 스케일러를 저장할 pkl 파일 경로
             (예: 'models/scaler.pkl') (기본값: None, 저장하지 않음)
         verbose (bool): 컬럼별 스케일링 전후의 값의 범위를 출력할지 여부 (기본값: True)
@@ -453,17 +551,15 @@ def scaling(df, columns=None, method='standard', save_path=None, verbose=True):
         columns = list(df.select_dtypes(include='number').columns)
 
     # --- 2) 작업 준비 및 스케일러 이름 정규화 ---
-    result = df.copy()      # 원본을 보존하기 위해 복사본으로 작업
+    result = df.copy()    # 원본을 보존하기 위해 복사본으로 작업
 
-    # 대소문자와 뒤에 붙은 'scaler'를 떼어내 이름을 통일한다 ('StandardScaler' -> 'standard')
+    # 대소문자와 뒤에 붙은 'scaler' 를 떼어내 이름을 통일한다 ('StandardScaler' -> 'standard')
     name = method.lower().replace('scaler', '').strip()
 
     # 오타를 냈을 때 KeyError 대신 사용 가능한 이름을 알려준다
     if name not in SCALERS:
-        raise ValueError(
-            f"지원하지 않는 스케일러입니다: '{method}' "
-            f"(사용 가능: {list(SCALERS.keys())})"
-        )
+        raise ValueError(f"지원하지 않는 스케일러입니다: '{method}' "
+                         f"(사용 가능: {list(SCALERS.keys())})")
 
     # --- 3) 스케일러 학습 및 변환 ---
     # 이름에 해당하는 클래스로 스케일러를 만들어 대상 컬럼의 기준값(평균, 표준편차 등)을 학습시킨다
@@ -487,7 +583,7 @@ def scaling(df, columns=None, method='standard', save_path=None, verbose=True):
     if save_path:
         folder = os.path.dirname(save_path)
         if folder:
-            os.makedirs(folder, exist_ok=True)  # 경로에 없는 폴더가 있으면 만들어 준다
+            os.makedirs(folder, exist_ok=True)    # 경로에 없는 폴더가 있으면 만들어 준다
 
         joblib.dump(scaler, save_path)
 
@@ -495,3 +591,4 @@ def scaling(df, columns=None, method='standard', save_path=None, verbose=True):
             print(f'\n스케일러 저장: {save_path} ({type(scaler).__name__})')
 
     # --- 6) 스케일링된 데이터프레임 반환 ---
+    return result

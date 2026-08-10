@@ -1,35 +1,36 @@
 import numpy as np
+from IPython.display import display
 from pandas import to_datetime, DataFrame, ExcelWriter
 
-def set_type(data, as_int=[], as_float=[], as_string=[], as_category=[], as_datetime=[]):
-
+def set_type(data, as_int=[], as_float=[], as_string=[], 
+             as_category=[], as_datetime=[]):
     """
-    데이터프레임의 컬럼 타입을 변경하고 변경된 데이터프레임의 정보를 출력하는 함수
+    데이터프레임의 컬럼 타입을 변경하고 
+    변경된 데이터프레임의 정보를 출력하는 함수
 
     Args:
-        data (DataFrame) : 타입을 변경할 데이터프레임
-        as_int (list) : int 타입으로 변경할 컬럼 리스트
-        as_float (list) : float 타입으로 변경할 컬럼 리스트
-        as_string (list) : string 타입으로 변경할 컬럼 리스트
-        as_category (list) : category 타입으로 변경할 컬럼 리스트
-        as_datetime (list) : datetime 타입으로 변경할 컬럼 리스트
+        data (DataFrame): 타입을 변경할 데이터프레임
+        as_int (list): int 타입으로 변경할 컬럼 리스트
+        as_float (list): float 타입으로 변경할 컬럼 리스트
+        as_string (list): string 타입으로 변경할 컬럼 리스트
+        as_category (list): category 타입으로 변경할 컬럼 리스트
+        as_datetime (list): datetime 타입으로 변경할 컬럼 리스트
 
-    Return:
+    Returns:
         DataFrame: 타입이 변경된 데이터프레임
     """
-
     df = data.copy()
-
+    
     for col in as_int:
-        df[col] =df[col].astype(int)
+        df[col] = df[col].astype(int)
     for col in as_float:
-        df[col] =df[col].astype(float)
+        df[col] = df[col].astype(float)
     for col in as_string:
-        df[col] =df[col].astype(str)
+        df[col] = df[col].astype(str)
     for col in as_category:
-        df[col] =df[col].astype('category')
+        df[col] = df[col].astype('category')
     for col in as_datetime:
-        df[col] =to_datetime(df[col])
+        df[col] = to_datetime(df[col])
 
     df.info()
 
@@ -40,120 +41,115 @@ def get_number_column_names(data):
     데이터프레임에서 숫자형 컬럼의 이름을 리스트로 반환하는 함수
 
     Args:
-        data(DataFrame): 숫자형 컬럼의 이름을 추출할 데이터프레임
-    
+        data (DataFrame): 숫자형 컬럼의 이름을 추출할 데이터프레임
+
     Returns:
         list: 숫자형 컬럼의 이름 리스트
     """
-
-    return data.select_dtypes(include="number").columns.to_list()   
-# 데이터프레임에서 숫자형 타입만 선택해서 이름 가져오기 > 리스트 반환
+    return data.select_dtypes(include="number").columns.to_list()
 
 def get_categorical_column_names(data):
     """
     데이터프레임에서 범주형 컬럼의 이름을 리스트로 반환하는 함수
 
     Args:
-        data(DataFrame): 범주형 컬럼의 이름을 추출할 데이터프레임
-    
+        data (DataFrame): 범주형 컬럼의 이름을 추출할 데이터프레임
+
     Returns:
-        list: 범주형 컬럼의 이름 리스트    
-    
+        list: 범주형 컬럼의 이름 리스트
     """
     return data.select_dtypes(include="category").columns.to_list()
-# 데이터프레임에서 범주형 타입만 선택해서 이름 가져오기 > 리스트 반환
-
+    
 
 def check_duplicates(data, drop=True):
     """
     데이터프레임에서 행 단위 중복을 검사하고, 중복된 행을 제거하는 함수
 
     Args:
-        data (pd.DataFrame) : 중복을 검사할 데이터프레임
-        drop (bool) : 중복된 행을 제거할지 여부(기본값:True)
+        data (DataFrame): 중복을 검사할 데이터프레임
+        drop (bool): 중복된 행을 제거할지 여부 (기본값: True)
 
     Returns:
-        DataFrame: 중복이 제거된 데이터 프레임
+        DataFrame: 중복이 제거된 데이터프레임
     """
-
-    df= data.copy()
-    duplicate_rows = df.duplicated()  # 중복 여부 True/False
-    num_duplicates = duplicate_rows.sum() # 중복 개수 계산
+    df = data.copy()
+    duplicate_rows = df.duplicated()
+    num_duplicates = duplicate_rows.sum() 
     print(f"중복된 행의 수: {num_duplicates}")
-
+    
     if drop and num_duplicates > 0:
-        df= df.drop_duplicates() # 중복 제거
+        df = df.drop_duplicates()
         print("중복된 행이 제거되었습니다.")
-
+    
     return df
+
 
 def check_missing_values(data):
     """
-    데이터프레임에서 컬럼별 결측치 개수와 비율을 계산하여 데이터프레임으로 반환하는 함수
+    데이터프레임에서 컬럼별 결측치 개수와 비율을 계산하여 데이터 프레임으로 반환하는 함수
 
     Args:
-        data(pd.DataFrame): 결측치를 점검할 데이터프레임
-    
+        data (DataFrame): 결측치를 점검할 데이터프레임
+
     Returns:
         DataFrame: 컬럼별 결측치 개수와 비율이 포함된 데이터프레임
     """
-
     na_count = data.isna().sum()
     na_ratio = (na_count / len(data)) * 100
 
     return DataFrame({
         'Missing Count': na_count,
-        'Missing Ratio (%)' : na_ratio
+        'Missing Ratio (%)': na_ratio
     })
+
 
 def categorical_summary(data, columns=None, value_counts=True, save_path=None):
     """
     데이터프레임의 범주형 컬럼에 대한 요약 통계를 반환하는 함수
 
     Args:
-        data (pd.DataFrame): 범주형 컬럼의 요약 통계를 출력할 데이터프레임
+        data (DataFrame): 범주형 컬럼의 요약 통계를 출력할 데이터프레임
         columns (list): 요약 통계를 출력할 범주형 컬럼 리스트
-        value_counts (bool) : 각 범주형 컬럼의 value_counts()를 출력할지 여부 (기본값: True)
-        save_path (str) : 요약 통계 결과를 CSV 파일로 저장할 경로 (기본값: None, 저장하지 않음)
+        value_counts (bool): 각 범주형 컬럼의 value_counts()를 출력할지 여부 (기본값: True)
+        save_path (str): 요약 통계 결과를 CSV 파일로 저장할 경로 (기본값: None, 저장하지 않음)
 
     Returns:
-        DataFrame: 범주형 컬럼에 대한 요약 통계가 포함된 데이터 프레임
+        DataFrame: 범주형 컬럼에 대한 요약 통계가 포함된 데이터프레임
     """
-
     # columns가 비어있으면 데이터프레임에서 범주형 컬럼의 이름을 가져옴
     if not columns:
         columns = get_categorical_column_names(data)
 
     # 대상 컬럼으로 데이터프레임 생성
-    df= data[columns].copy()
+    df = data[columns].copy()
 
     # 명목형 변수의 기술 통계량 계산
-    desc_df=df.describe(include="category")
+    desc_df = df.describe(include="category")
 
     # 저장될 파일 경로가 전달된 경우 기술 통계량을 Excel 파일로 저장
     if save_path:
         desc_df.to_excel(save_path, sheet_name='Summary', index=True)
-
+    
     # 각 범주형 컬럼의 value_counts()를 출력해야 한다면?
     if value_counts:
         for col in columns:
             cdf = DataFrame(data[col].value_counts())
             cdf.index.name = col
             cdf.sort_index(inplace=True)
-            print(f"컬럼 '{col}'의 value_counts():")
+            print(f"📊 컬럼 '{col}'의 value_counts():")
             display(cdf)
 
             # 저장될 파일 경로가 전달된 경우 value_counts 결과를 Excel 파일로 저장
             if save_path:
                 # 기존 파일에 이어 쓰기를 수행하기 위해 ExcelWriter를 사용하여 시트별로 저장
-                with ExcelWriter(save_path, mode='a') as excel_writer:
+                # xlsxwriter는 이어 쓰기(mode='a')를 지원하지 않으므로 openpyxl을 명시
+                with ExcelWriter(save_path, mode='a', engine='openpyxl') as excel_writer:
                     cdf.to_excel(excel_writer, sheet_name=col, index=True)
-                    
+
     return desc_df
 
 def numerical_summary(data, columns=None, save_path=None):
-    """
-    데이터프레임의 숫자형 컬럼에 대한 요약 통계를 반환하는 함수
+    """데이터프레임의 숫자형 컬럼에 대한 요약 통계를 반환하는 함수
 
     Args:
         data (DataFrame): 숫자형 컬럼의 요약 통계를 출력할 데이터프레임
