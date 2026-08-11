@@ -846,23 +846,23 @@ def auto_correlation(data, column=None, period=None, plot=True,
         data = data[column]
 
     data = data.dropna()
-    n = len(data)
+    n = len(data)    # 전체 데이터의 길이
 
     # --- 2) 최대 시차 결정 ---
     # 상한: 뒤쪽 시차일수록 계산에 쓰이는 쌍이 줄어 추정이 불안정해진다.
-    limit = n // 4
+    limit = n // 4   # 관측치수 4를 나눈거를 넘을 수는 없음
 
     if period is None:
-        lags = min(int(10 * np.log10(n)), limit)    # statsmodels 기본값
+        lags = min(int(10 * np.log10(n)), limit)    # statsmodels 기본값 / 상용로그
     else:
         # 계절 주기의 3배를 노리되, 판정에 꼭 필요한 2배는 상한보다 우선한다
         lags = max(min(3 * period, limit), 2 * period)
 
-    # --- 3) 계수 계산 (lag 0은 자기 자신이므로 제외) ---
+    # --- 3) 계수 계산 (lag 0은 자기 자신이므로 제외) ---  자기 자신과의 상관계스는 항상 1이니가
     acf_values = acf(data, nlags=lags)[1:]
     pacf_values = pacf(data, nlags=lags)[1:]
 
-    # 유의성 기준값: 2 / sqrt(N). 관측치가 많을수록 작아진다.
+    # 유의성 기준값: 2 / sqrt(N). 관측치가 많을수록 작아진다. / 미세한 상관계수도 잡을 수 있음, 즉 시계열은 데이터가 많을 수록 좋음
     threshold = 2 / np.sqrt(n)
 
     # --- 4) 결과표 구성 ---
